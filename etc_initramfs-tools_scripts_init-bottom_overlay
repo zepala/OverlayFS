@@ -259,6 +259,30 @@ EOF
     } <"${root_ro}/etc/fstab"
 } >"${rootmnt}/etc/fstab"
 
+# Create /usr/local/sbin/toggle-overlay script in new root filesystem
+#
+# This script allows to remount the overlay ro partition
+# in read-only or read-write mode.
+#
+log_begin_msg "Overlayfs: Creating toggle-overlay script in new root filesystem ..."
+{
+    cat <<EOF
+#!/bin/sh
+
+# Remount $overlay_ro in read-only / read-write mode
+
+if [ -w "$overlay_ro" ]; then
+  mount -o remount,ro "$overlay_ro"
+  echo "Partition ${overlay_ro} remounted Read/Only ..."
+else
+  mount -o remount,rw "$overlay_ro"
+  echo "Partition ${overlay_ro} remounted Read/Write ..."
+fi
+EOF
+} > "${rootmnt}/usr/local/sbin/toggle-overlay"
+
+chmod 0700 "${rootmnt}/usr/local/sbin/toggle-overlay"
+
 log_end_msg
 exit 0
 # End of overlayfs script
