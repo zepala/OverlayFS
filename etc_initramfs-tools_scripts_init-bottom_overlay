@@ -1,5 +1,7 @@
 #!/bin/sh
 
+# Entire rewrite of a script I found years ago From Oliver Jowett
+
 #
 # Overlayfs script
 #
