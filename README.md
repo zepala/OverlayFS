@@ -25,9 +25,17 @@ This script is a rewrite of a script from Oliver Jowett I found years ago. Modif
   ```
   
 * Add parameters to kernel commande line :
+
+  For a tmpfs rw overlay example :
   
   ```
   ovsize=25% overlay=yes
+  ```
+
+  For a hard drive rw overlay example :
+
+  ```
+  ovpart=LABEL=ovfs overlay=yes
   ```
 
 ### Parameters
