@@ -4,6 +4,16 @@
 # Overlayfs script
 #
 
+# Description :
+# This script configures an overlayfs over the root filesystem
+# during initramfs stage.
+
+# Needed kernel modules :
+# overlay
+
+# Needed tools :
+# busybox
+
 # Kernel command line parameters :
 #
 # overlay=[ yes | no ]
@@ -25,7 +35,7 @@
 #   Directory name for the read only part of overlayfs.
 #   Defaults to "/overlayfs/ro"
 #
-# ovrw=[ dirname ] 
+# ovrw=[ dirname ]
 #   Directory name for the read write part of overlayfs.
 #   Defaults to "/overlayfs/rw"
 
@@ -58,14 +68,15 @@ log_info_msg() {
 
 find_fstype() {
     # Return real fs type or tmpfs if unavailable
-    local device=$1
-    local fstype=$(get_fstype $device)
+    local device="$1"
+    local fstype=$(get_fstype "$device")
     echo ${fstype:-"tmpfs"}
 }
 
 sanitize() {
     # Remove multiple //// in paths
-    echo "$1" | sed -E 's|/+|/|g'
+    local sanitized_path="$1"
+    echo "$sanitized_path" | sed -E 's|/+|/|g'
 }
 
 # Get kernel command line parameters
