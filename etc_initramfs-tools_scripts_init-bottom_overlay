@@ -9,8 +9,10 @@
 # overlay=[ yes | no ]
 #   Activate overlayfs. Defaults to 'no'.
 #
-# ovpart=[ tmpfs | /dev/device | LABEL | UUID | PARTUUID ]
+# ovpart=[ tmpfs | /dev/device | LABEL= | UUID= | PARTUUID= ]
 #   Which device to use as rw overlay. Defaults to tmpfs.
+#   You can use device name (/dev/sdx), LABEL=, UUID= or PARTUUID=
+#   to specify the device.
 #
 # ovsize=[ 256m | 25% ]
 #   Size of the tmpfs, given in megabyte or in % of ram
