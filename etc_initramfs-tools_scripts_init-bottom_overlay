@@ -69,6 +69,7 @@ sanitize() {
 }
 
 # Get kernel command line parameters
+log_begin_msg "Overlayfs: Parsing kernel command line ..."
 for x in $(cat /proc/cmdline); do
     case "$x" in
         overlay=*|ovsize=*|ovdir=*|ovro=*|ovrw=*)
@@ -91,6 +92,7 @@ for x in $(cat /proc/cmdline); do
 done
 
 # Define default values for vars if not set
+log_begin_msg "Overlayfs: Setting default parameters ..."
 quiet=${quiet:-"n"}
 overlay=${overlay:-"no"}
 overlay_device=${ovdev:-"tmpfs"}
@@ -101,22 +103,28 @@ overlay_ro=${ovro:-"/overlayfs/ro"}
 overlay_rw=${ovrw:-"/overlayfs/rw"}
 
 # Build paths
+log_begin_msg "Overlayfs: Building overlayfs paths ..."
+overlay_ro=$(sanitize "${overlay_ro}")
+overlay_rw=$(sanitize "${overlay_rw}")
 overlay_upper=$(sanitize "${overlay_rw}/${overlay_dir}/upper")
 overlay_work=$(sanitize "${overlay_rw}/${overlay_dir}/work")
 
 # Exit if Overlayfs is not enabled
+log_begin_msg "Overlayfs: Initializing overlayfs ..."
 if [ "$overlay" != "yes" ]; then
     log_info_msg "OV1: Overlay not enabled, exiting ..."
     exit 0
 fi
 
 # Exit if overlay module is not loaded
+log_begin_msg "Overlayfs: Loading overlay module ..."
 if ! modprobe -qb overlay; then
     log_failure_msg "OV2: Unable to load overlay module, exiting ..."
     exit 0
 fi
 
 # Create $overlay_ro et $overlay_rw directories
+log_begin_msg "Overlayfs: Creating overlayfs directories ..."
 for dir in "$overlay_ro" "$overlay_rw"; do
     [ -d "${dir}" ] || mkdir -p "${dir}"
     if [ $? -ne 0 ]; then
@@ -126,6 +134,7 @@ for dir in "$overlay_ro" "$overlay_rw"; do
 done
 
 # Mount $overlay_rw filesystem
+log_begin_msg "Overlayfs: Mounting overlayfs rw device ..."
 if [ $overlay_device = 'tmpfs' ]; then
     # Mount as tmpfs filesystem (volatile)
     if ! mount -t tmpfs -o "size=$overlay_size" overlay-rw $overlay_rw; then
@@ -146,6 +155,7 @@ else
 fi
 
 # Create $overlay_upper and $overlay_work directories
+log_begin_msg "Overlayfs: Creating overlayfs upper and work directories ..."
 for dir in "$overlay_upper" "$overlay_work"; do
     if ! mkdir -p ${dir}; then
         log_failure_msg "OV5: Error while creating ${dir}, exiting ..."
@@ -154,12 +164,14 @@ for dir in "$overlay_upper" "$overlay_work"; do
 done
 
 # Move real root filesystem to $overlay_ro
+log_begin_msg "Overlayfs: Moving root filesystem to $overlay_ro ..."
 if ! mount -o move "${rootmnt}" $overlay_ro; then
     log_failure_msg "OV6: Error while moving root filesystem to $overlay_ro, exiting ..."
     exit 0
 fi
 
 # Create the overlayfs over root filesystem
+log_begin_msg "Overlayfs: Creating overlayfs over root filesystem ..."
 if ! mount -t overlay -o lowerdir=$overlay_ro,upperdir=$overlay_upper,workdir=$overlay_work overlay-root "${rootmnt}"; then
     log_failure_msg "OV7: Error while creating $overlay_ro overlay filesystem over root filesystem, exiting ..."
 
@@ -174,6 +186,7 @@ if ! mount -t overlay -o lowerdir=$overlay_ro,upperdir=$overlay_upper,workdir=$o
 fi
 
 # Create $overlay_ro and $overlay_rw in the new root filesystem
+log_begin_msg "Overlayfs: Creating $overlay_ro and $overlay_rw in new root filesystem ..."
 root_ro=$(sanitize "$rootmnt/$overlay_ro")
 root_rw=$(sanitize "$rootmnt/$overlay_rw")
 for dir in "$root_ro" "$root_rw"; do
@@ -185,6 +198,7 @@ for dir in "$root_ro" "$root_rw"; do
 done
 
 # Move $overlay_ro and $overlay_rw to the new root filesystem
+log_begin_msg "Overlayfs: Moving $overlay_ro and $overlay_rw to new root filesystem ..."
 if ! mount -o move "$overlay_ro" "$root_ro"; then
     log_failure_msg "OV9: Error while moving $overlay_ro filesystem to $root_ro, exiting ..."
     exit 0
@@ -196,6 +210,7 @@ if ! mount -o move "$overlay_rw" "$root_rw"; then
 fi
 
 # Create overlay fstab
+log_begin_msg "Overlayfs: Creating new fstab in new root filesystem ..."
 {
     cat <<EOF
 # This system is booted whith overlayfs.
