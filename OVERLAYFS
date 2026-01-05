@@ -1,0 +1,35 @@
+- install the two shellscripts into the appropriate places under /etc/initramfs-tools
+- chmod +x the 2 shellscripts
+- run update-initramfs
+- put "overlay=yes" on the kernel command line
+- tune "rwsize=256m" on the command line for the rw root overlay size (Defaults to 256m)
+- reboot
+
+With the overlay in place, the real root is mounted readonly on /ro.
+Only the root fs is changed, other filesystems are mounted normally.
+
+Remove "overlay=yes" (or change it to something other than yes) and reboot to go back to readwrite.
+(This probably means that you want the commandline config to live somewhere other than on the root fs, e.g. under /boot)
+
+Command line parameters:
+
+overlay=[ yes | no ]
+  Activate overlayfs. Defaults to 'no'.
+
+  ovpart=[ tmpfs | /dev/device | LABEL | UUID | PARTUUID ]
+  Which device to use as rw overlay. Defaults to tmpfs.
+
+ovsize=[ 256m | 25% ]
+  Size of the tmpfs, given in megabyte or in % of ram
+  Defaults to 256m.
+
+ovdir=[ dirname ]
+  Subdirectory name or the rw overlay, defaults to "".
+
+ovro=[ dirname ]
+  Directory name for the read only part of overlayfs.
+  Defaults to "/overlayfs/ro"
+
+ovrw=[ dirname ] 
+  Directory name for the read write part of overlayfs.
+  Defaults to "/overlayfs/rw"
