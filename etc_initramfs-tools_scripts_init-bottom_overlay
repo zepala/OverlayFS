@@ -31,7 +31,7 @@
 #   Defaults to 256m.
 #
 # ovdir=[ dirname ]
-#   Subdirectory name or the rw overlay, defaults to "".
+#   Subdirectory name of the rw overlay, defaults to "".
 #
 # ovro=[ dirname ]
 #   Directory name for the read only part of overlayfs.
@@ -81,7 +81,7 @@ sanitize() {
     echo "$sanitized_path" | sed -E 's|/+|/|g'
 }
 
-# Get kernel command line parameters
+# Parse kernel command line parameters
 log_begin_msg "Overlayfs: Parsing kernel command line ..."
 for x in $(cat /proc/cmdline); do
     case "$x" in
@@ -148,7 +148,7 @@ done
 
 # Mount $overlay_rw filesystem
 log_begin_msg "Overlayfs: Mounting overlayfs rw device ..."
-if [ $overlay_device = 'tmpfs' ]; then
+if [ $overlay_fstype = 'tmpfs' ]; then
     # Mount as tmpfs filesystem (volatile)
     if ! mount -t tmpfs -o "size=$overlay_size" overlay-rw $overlay_rw; then
         log_failure_msg "OV4: Unable to mount $overlay_device on $overlay_rw, exiting ..."
@@ -282,6 +282,10 @@ EOF
 } > "${rootmnt}/usr/local/sbin/toggle-overlay"
 
 chmod 0700 "${rootmnt}/usr/local/sbin/toggle-overlay"
+
+# Disable systemd-remount-fs.service if overlay is on tmpfs
+log_begin_msg "Overlayfs: Disabling systemd-remount-fs.service if overlay is on tmpfs ..."
+[ -d "${rootmnt}/etc/systemd/system" ] && ln -sf /dev/null "${rootmnt}/etc/systemd/system/systemd-remount-fs.service"
 
 log_end_msg
 exit 0
