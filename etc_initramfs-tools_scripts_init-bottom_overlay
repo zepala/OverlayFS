@@ -10,6 +10,9 @@
 # This script configures an overlayfs over the root filesystem
 # during initramfs stage.
 
+# You can reset/erase the rw overlay content by touching a file named "reset"
+# at the root of the system, proceed by rebooting.
+
 # Needed kernel modules :
 # overlay
 
@@ -61,28 +64,9 @@ esac
 #
 # Overlayfs script
 #
+
 log_begin_msg "Overlayfs: Starting overlayfs script v1.0"
 log_end_msg
-
-# Local functions (Inherits /scripts/functions)
-log_info_msg() {
-    # Log informative messages
-    _log_msg "Info: %s\\n" "$*"
-}
-
-find_fstype() {
-    # Return real fs type or tmpfs if unavailable
-    local device="$1"
-    local fstype=$(get_fstype "$device")
-    fstype=${fstype:-"tmpfs"}
-    echo "$fstype"
-}
-
-sanitize() {
-    # Remove multiple //// in paths
-    local sanitized_path="$1"
-    echo "$sanitized_path" | tr -s '/'
-}
 
 # Parse kernel command line parameters
 log_begin_msg "Overlayfs: Parsing kernel command line"
@@ -108,6 +92,44 @@ for x in $(cat /proc/cmdline); do
 done
 log_end_msg
 
+# Exit if Overlayfs is not enabled
+log_begin_msg "Overlayfs: Initializing overlayfs"
+if [ "$overlay" != "yes" ]; then
+    log_warning_msg "Overlayfs #1: Overlay not enabled, exiting"
+    exit 0
+fi
+log_end_msg
+
+# Exit if overlay module is not loaded
+log_begin_msg "Overlayfs: Loading overlay module"
+if ! modprobe -qb overlay; then
+    log_failure_msg "Overlayfs #2: Unable to load overlay module, exiting"
+    exit 0
+fi
+log_end_msg
+
+# Local functions (Inherits /scripts/functions)
+log_info_msg() {
+    # Log informative messages
+    _log_msg "Info: %s\\n" "$*"
+}
+
+find_fstype() {
+    # Return real fs type or tmpfs if unavailable
+    local device="$1"
+    local fstype=$(get_fstype "$device")
+    echo ${fstype:-"tmpfs"}
+}
+
+sanitize() {
+    # Remove multiple //// in paths
+    local sanitized_path="$1"
+    echo "$sanitized_path" | tr -s '/'
+}
+
+# Define constant variables
+overlay_reset="reset"
+
 # Define default values for vars if not set
 log_begin_msg "Overlayfs: Setting default parameters"
 quiet=${quiet:-"n"}
@@ -129,22 +151,6 @@ overlay_upper=$(sanitize "$overlay_rw/$overlay_dir/upper")
 overlay_work=$(sanitize "$overlay_rw/$overlay_dir/work")
 root_ro=$(sanitize "$rootmnt/$overlay_ro")
 root_rw=$(sanitize "$rootmnt/$overlay_rw")
-log_end_msg
-
-# Exit if Overlayfs is not enabled
-log_begin_msg "Overlayfs: Initializing overlayfs"
-if [ "$overlay" != "yes" ]; then
-    log_info_msg "Overlayfs #1: Overlay not enabled, exiting"
-    exit 0
-fi
-log_end_msg
-
-# Exit if overlay module is not loaded
-log_begin_msg "Overlayfs: Loading overlay module"
-if ! modprobe -qb overlay; then
-    log_failure_msg "Overlayfs #2: Unable to load overlay module, exiting"
-    exit 0
-fi
 log_end_msg
 
 # Create $overlay_ro et $overlay_rw directories
@@ -180,6 +186,17 @@ else
     fi
 fi
 log_end_msg
+
+# Test if $overlay_reset is present in $overlay_upper
+if [ -f "$overlay_upper/$overlay_reset" ]; then
+    log_begin_msg "Overlayfs: Reset file found, resetting $overlay_upper content"
+    rm -rf "$overlay_upper"/*
+    if [ $? -ne 0 ]; then
+        log_failure_msg "Overlayfs #4b: Error while resetting $overlay_upper content, exiting"
+        exit 0
+    fi
+    log_end_msg
+fi
 
 # Create $overlay_upper and $overlay_work directories
 log_begin_msg "Overlayfs: Creating overlayfs upper and work directories"
