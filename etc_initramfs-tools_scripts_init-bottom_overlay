@@ -9,15 +9,35 @@
 # Description :
 # This script configures an overlayfs over the root filesystem
 # during initramfs stage.
-
-# You can reset/erase the rw overlay content by touching a file named "reset"
-# at the root of the system, proceed by rebooting.
+#
+# You can disable overlayfs by using the script "disable-overlay"
+# located in /usr/local/sbin/disable-overlay
+#
+# You can reset/erase the rw overlay content by using the script "reset-overlay"
+# located in /usr/local/sbin/reset-overlay in the root filesystem.
+#
+# You can remount the overlay ro partition in read-only or read-write mode
+# by using the script "toggle-overlay" located in /usr/local/sbin/toggle-overlay
+# in the root filesystem.
+#
+# The rw overlay can be located on a tmpfs (volatile) or on a real filesystem
+# (persistent). If located on a tmpfs, all changes will be lost at next reboot.
+# If located on a real filesystem, all changes will be kept at next reboot.
+#
+# You can specify which device to use as rw overlay by using the kernel
+# command line parameter "ovpart=".
+#
+# Scripts :
+#   toggle-overlay      - Toggle read-only / read-write mode of overlay ro partition
+#   reset-overlay       - Delete rw overlay content at next reboot
+#   disable-overlay     - Disable overlayfs (Creates /disable_overlay)
+#   enable-overlay      - Enable overlayfs (Removes /disable_overlay)
 
 # Needed kernel modules :
-# overlay
+#   - overlay
 
 # Needed tools :
-# busybox
+#   - busybox
 
 # Kernel command line parameters :
 #
@@ -29,9 +49,9 @@
 #   You can use device name (/dev/sdx), LABEL=, UUID= or PARTUUID=
 #   to specify the device.
 #
-# ovsize=[ 256m | 25% ]
+# ovsize=[ 25% | 256m ]
 #   Size of the tmpfs, given in megabyte or in % of ram
-#   Defaults to 256m.
+#   Defaults to 25% of the available ram.
 #
 # ovdir=[ dirname ]
 #   Subdirectory name of the rw overlay, defaults to "".
@@ -100,6 +120,14 @@ if [ "$overlay" != "yes" ]; then
 fi
 log_end_msg
 
+# Exit if /disable_overlay file is present
+log_begin_msg "Overlayfs: Overlay disabled by file /disable_overlay"
+if [ -f "$rootmnt/disable_overlay" ]; then
+    log_warning_msg "Overlayfs #1b: Overlay disabled by file /disable_overlay, exiting"
+    exit 0
+fi
+log_end_msg
+
 # Exit if overlay module is not loaded
 log_begin_msg "Overlayfs: Loading overlay module"
 if ! modprobe -qb overlay; then
@@ -128,7 +156,8 @@ sanitize() {
 }
 
 # Define constant variables
-overlay_reset="reset"
+overlay_reset="reset_persistent_overlayfs"
+overlay_disable="disable_overlay"
 
 # Define default values for vars if not set
 log_begin_msg "Overlayfs: Setting default parameters"
@@ -136,7 +165,7 @@ quiet=${quiet:-"n"}
 overlay=${overlay:-"no"}
 overlay_device=${ovdev:-"tmpfs"}
 overlay_fstype=$(find_fstype ${overlay_device})
-overlay_size=${ovsize:-"256m"}
+overlay_size=${ovsize:-"25%"}
 overlay_dir=${ovdir:-""}
 overlay_ro=${ovro:-"/overlayfs/ro"}
 overlay_rw=${ovrw:-"/overlayfs/rw"}
@@ -175,24 +204,36 @@ if [ "$overlay_fstype" = "tmpfs" ]; then
     fi
 
     if ! chmod 0755 "$overlay_rw"; then
-        log_warning_msg "Overlayfs #4: Unable to set permissions on $overlay_rw, exiting"
+        log_warning_msg "Overlayfs #4: Unable to set permissions on $overlay_rw"
     fi
 else
-    # Mount as real filesystem (persistent)
+    # Mount as real filesystem (persistent), if fails, remount as tmpfs.
     log_info_msg "($overlay_fstype partition $overlay_device) on $overlay_rw"
     if ! mount -t "$overlay_fstype" "$overlay_device" "$overlay_rw"; then
-        log_failure_msg "Overlayfs #4: Unable to mount $overlay_device on $overlay_rw, exiting"
-        exit 0
+        log_warning_msg "Overlayfs #4: Unable to mount $overlay_device on $overlay_rw, mounting as tmpfs"
+        if ! mount -t tmpfs -o size="$overlay_size" overlay-rw "$overlay_rw"; then
+            log_failure_msg "Overlayfs #4: Unable to mount $overlay_device on $overlay_rw, exiting"
+            exit 0
+        fi
+        
+        if ! chmod 0755 "$overlay_rw"; then
+            log_warning_msg "Overlayfs #4: Unable to set permissions on $overlay_rw, exiting"
+        fi
     fi
 fi
 log_end_msg
 
-# Test if $overlay_reset is present in $overlay_upper
+# Delete content of overlayfs if $overlay_reset is present in $overlay_upper
 if [ -f "$overlay_upper/$overlay_reset" ]; then
     log_begin_msg "Overlayfs: Reset file found, resetting $overlay_upper content"
     rm -rf "$overlay_upper"/*
     if [ $? -ne 0 ]; then
         log_failure_msg "Overlayfs #4b: Error while resetting $overlay_upper content, exiting"
+        exit 0
+    fi
+    rm -rf "$overlay_work"/*
+    if [ $? -ne 0 ]; then
+        log_failure_msg "Overlayfs #4b: Error while resetting $overlay_work content, exiting"
         exit 0
     fi
     log_end_msg
@@ -287,6 +328,8 @@ EOF
             if [ "$dir" != "/" ]; then
                 if [ "$dir" = "/boot/firmware" ]; then
                     echo "$dev $dir $fstype noauto,$fsopts $freq $pass"
+                elif [ "$dir" = "/boot/efi" ]; then
+                    echo "$dev $dir $fstype noauto,$fsopts $freq $pass"
                 else
                     echo "$dev $dir $fstype $fsopts $freq $pass"
                 fi
@@ -318,6 +361,74 @@ fi
 EOF
 } > "$rootmnt/usr/local/sbin/toggle-overlay"
 chmod 0700 "$rootmnt/usr/local/sbin/toggle-overlay"
+log_end_msg
+
+# Create /usr/local/sbin/reset-overlay script in new root filesystem
+#
+# This script creates/removes the reset file to reset/keep
+# the rw overlay content at next reboot.
+#
+log_begin_msg "Overlayfs: Creating reset-overlay script in new root filesystem"
+{
+    cat <<EOF
+#!/bin/sh
+
+# Create/remove reset file to reset/keep rw overlay content at next reboot
+
+if [ -f "$overlay_upper/$overlay_reset" ]; then
+  rm -f "$overlay_upper/$overlay_reset"
+  echo "Overlay reset file removed, rw overlay content will be kept at next reboot"
+else
+  touch "$overlay_upper/$overlay_reset"
+  echo "Overlay reset file created, rw overlay content will be reset at next reboot"
+fi
+EOF
+} > "$rootmnt/usr/local/sbin/reset-overlay"
+chmod 0700 "$rootmnt/usr/local/sbin/reset-overlay"
+log_end_msg
+
+# Create /usr/local/sbin/disable-overlay script in new root filesystem
+# This script creates /disable_overlay
+# to disable overlayfs at next boot.
+#
+log_begin_msg "Overlayfs: Creating /$overlay_disable file in new root filesystem"
+{
+    cat <<EOF
+#!/bin/sh
+
+# This file disables overlayfs at next boot.
+
+if [ ! -f "$overlay_ro/$overlay_disable" ]; then
+    echo "Overlayfs will be disabled at next boot"
+    mount -o remount,rw "$overlay_ro"
+    touch "$overlay_ro/$overlay_disable"
+    mount -o remount,ro "$overlay_ro"   
+fi
+EOF
+} > "$rootmnt/usr/local/sbin/disable-overlay"
+chmod 0700 "$rootmnt/usr/local/sbin/disable-overlay"
+log_end_msg
+
+# Create /usr/local/sbin/enable-overlay script in new root filesystem
+# This script removes /disable_overlay
+# to re-enable overlayfs at next boot.
+#
+log_begin_msg "Overlayfs: Removing /$overlay_disable file in new root filesystem"
+{
+    cat <<EOF
+#!/bin/sh
+
+# This file enables overlayfs at next boot.
+
+if [ -f "$overlay_ro/$overlay_disable" ]; then
+    echo "Overlayfs will be enabled at next boot"
+    mount -o remount,rw "$overlay_ro"
+    rm -f "$overlay_ro/$overlay_disable"
+    mount -o remount,ro "$overlay_ro"   
+fi
+EOF
+} > "$rootmnt/usr/local/sbin/enable-overlay"
+chmod 0700 "$rootmnt/usr/local/sbin/enable-overlay"
 log_end_msg
 
 # Disable systemd-remount-fs.service if overlay is on tmpfs
