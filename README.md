@@ -51,7 +51,7 @@ This script is a rewrite of a script from Oliver Jowett I found years ago. Modif
 * ovsize=[ 256m | 25% ]
 
   Size of the tmpfs, given in megabyte or in % of ram
-  Defaults to 256m.
+  Defaults to 25%.
 
 * ovdir=[ dirname ]
 
