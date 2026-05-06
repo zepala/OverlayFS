@@ -44,7 +44,7 @@ This script is a rewrite of a script from Oliver Jowett I found years ago. Modif
 
   Activate overlayfs. Defaults to 'no'.
 
-* ovpart=[ tmpfs | /dev/device | LABEL | UUID | PARTUUID ]
+* ovpart=[ tmpfs | /dev/device | LABEL= | UUID= | PARTUUID= ]
 
   Which device to use as rw overlay. Defaults to tmpfs.
 
